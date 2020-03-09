@@ -35,12 +35,29 @@ class Board:
                 } 
                 return getAll()
             """
+        self.is_game_over_js = """
+            const isGameOver = () => {
+                const m = document.getElementsByClassName("game-message");
+                return m[0].classList.contains("game-over")
+                }
+            return isGameOver()
+            """
+        self.retry_js = """
+            document.getElementsByClassName("retry-button")[0].click();
+        """
+        self.get_score_js = """
+            const score = () => {
+                return document.getElementsByClassName("score-container")[0].innerText
+            }
+            return score()
+        """
         self.actionDic = {
             0: "UP",
             1: "DOWN",
             2: "LEFT",
             3: "RIGHT"
         }
+        self.number_offspring = 10
 
     def get_key_from_move(self, move):
 
@@ -54,6 +71,17 @@ class Board:
             return Keys.LEFT
         if direction == "RIGHT":
             return Keys.RIGHT
+
+    def is_game_over(self, browser):
+        result = browser.execute_script(self.is_game_over_js)
+        return result
+
+    def get_score(self, browser):
+        result = browser.execute_script(self.get_score_js)
+        return int(result.split("\n")[0])
+
+    def try_again(self, browser):
+        browser.execute_script(self.retry_js)
 
     def parse_board(self, browser):
         try:
@@ -90,6 +118,10 @@ class Board:
         if board_dictionary[pos] < int(value):
             board_dictionary[pos] = int(value)
 
+    def init_offspring(self, player, children, weights):
+        for i in range(self.number_offspring):
+            children.append(player.get_offspring(weights))
+
 
 if __name__ == "__main__":
 
@@ -100,17 +132,38 @@ if __name__ == "__main__":
     manager = Board()
 
     body = browser.find_element_by_tag_name("body")
-    game_over = browser.find_element_by_class_name("retry-button")
-    print(game_over)
+    # game_over = browser.find_element_by_class_name("retry-button")
+    # print(game_over)
+    max_score = 0
+    best_weights = player.weights_tuple()
+    children_to_try = [best_weights]
+
     while True:
 
-        manager.parse_board(browser)
-        move_int = player.getMove(manager)
-        # print(move_int)
-        if move_int != None:
-            key = manager.get_key_from_move(move_int)
-            body.send_keys(key)
-        else:
-            # game_over = browser.find_element_by_class_name()
-            pass
-    # browser.quit()
+        try_weights = children_to_try.pop()
+        player.set_weights(try_weights)
+        # get score for single offpsring
+        while True:
+
+            manager.parse_board(browser)
+            move_int = player.getMove(manager)
+            # print(move_int)
+            if move_int != None:
+                key = manager.get_key_from_move(move_int)
+                body.send_keys(key)
+
+            elif manager.is_game_over(browser):
+                score = manager.get_score(browser)
+                print(f"score... {score}")
+                if score > max_score:
+                    max_score = score
+                    best_weights = player.weights_tuple()
+                    print(f"new best weights {best_weights}")
+
+                break
+
+        if not children_to_try:
+            manager.init_offspring(player, children_to_try, best_weights)
+
+        manager.try_again(browser)
+        # browser.quit()

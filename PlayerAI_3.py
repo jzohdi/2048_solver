@@ -8,14 +8,16 @@ Created on Fri Jul  6 22:25:11 2018
 import time
 import math
 from Grid_3 import Grid
-from random import randint
+from random import randint, uniform
 from BaseAI_3 import BaseAI
 from collections import deque
 
+# from Dequeue import deque
+
 K = [[20, 15, 15, 15], [10, 4, 3, 2], [4, 3, 2, 1], [3, 2, 1, 0]]
-probability = 0.7
+probability = 0.6
 possibleNewTiles = [2, 4]
-depth_limit = 6
+depth_limit = 7
 time_limit = 2
 
 # heuristic functions
@@ -62,13 +64,13 @@ def corners(board, maxTile):
     return score
 
 
-def rateBoard(board, size, maxTile, action):
-
-    A = 2
-    B = 1.2
-    C = 2
-    D = 3
-    E = 0.20
+def rateBoard(weights, board, size, maxTile, action):
+    A = weights["A"]
+    B = weights["B"]
+    C = weights["C"]
+    D = weights["D"]
+    E = weights["E"]
+    F = weights["F"]
     # rating = 0
     penalty = 0
     # weight of each cell
@@ -78,15 +80,12 @@ def rateBoard(board, size, maxTile, action):
 
     corner = corners(board, maxTile)
 
-    if blank_spaces <= 2:
+    if blank_spaces <= 1:
         penalty = 250
 
     game_length = math.log(maxTile)/math.log(4) + math.log(maxTile)
 
-    return cell_weights*A*game_length + row_smooth*B * + corner*C + game_length*blank_spaces*D - penalty*game_length
-
-
-states_visited = {}
+    return cell_weights*A*game_length + row_smooth*B + corner*C + game_length*blank_spaces*D - penalty*game_length*F
 
 
 def getNewTileValue():
@@ -110,11 +109,11 @@ class Grid_State(Grid):
         self.depth = depth
         self.action = move
 
-    def expand(self):
+    def expand(self, weights):
         if self.depth % 2 == 0:
-            self.player_moves()
+            self.player_moves(weights)
         else:
-            self.comp_moves()
+            self.comp_moves(weights)
 
 #    def get_child(self, child_action):
 #        start_time = time.time()
@@ -122,7 +121,7 @@ class Grid_State(Grid):
 #        new_grid.map = [x[:] for x in self.map]
 #        return new_grid
 
-    def player_moves(self):
+    def player_moves(self, weights):
 
         moves = self.getAvailableMoves()
 
@@ -132,11 +131,14 @@ class Grid_State(Grid):
                     child = get_child(self.depth + 1, choice, self.map)
                     child.move(choice)
                     if child.map != self.map:
-                        child.utility = rateBoard(
-                            child.map, child.size, child.getMaxTile(), child.action)
+                        child.utility = rateBoard(weights,
+                                                  child.map,
+                                                  child.size,
+                                                  child.getMaxTile(),
+                                                  child.action)
                         self.children.append(child)
 
-    def comp_moves(self):
+    def comp_moves(self, weights):
 
         cells = [(x, y) for x in range(4)
                  for y in range(4) if self.map[x][y] == 0]
@@ -145,8 +147,11 @@ class Grid_State(Grid):
 
                 child = get_child(self.depth + 1, self.action, self.map)
                 child.setCellValue(cell, getNewTileValue())
-                child.utility = rateBoard(
-                    child.map, child.size, child.getMaxTile(), child.action)
+                child.utility = rateBoard(weights,
+                                          child.map,
+                                          child.size,
+                                          child.getMaxTile(),
+                                          child.action)
                 self.children.append(child)
 
     def to_s(self):
@@ -161,6 +166,13 @@ class Grid_State(Grid):
 
 
 class PlayerAI(BaseAI):
+    def __init__(self):
+        self.A = 0.9670060041155282  # cell weights
+        self.B = 1.8491286734253722  # smoothness
+        self.C = 0.7771772048658381  # corner
+        self.D = 1.3679127572190106  # blank spaces
+        self.E = 0.15645327196892767  # smoothness/E
+        self.F = 3.9441234710105078  # penalty
 
     def getMove(self, grid):
 
@@ -169,7 +181,8 @@ class PlayerAI(BaseAI):
         stack = deque()
         explored = set()
         begin_state = Grid_State(0, "Initial")
-
+        weights = {"A": self.A, "B": self.B, "C": self.C,
+                   "D": self.D, "E": self.E, "F": self.F}
         begin_state.map = [x[:] for x in grid.map]
         stack.append(begin_state)
         repr = begin_state.to_s()
@@ -178,7 +191,7 @@ class PlayerAI(BaseAI):
         while stack:
 
             node = stack.popleft()
-            node.expand()
+            node.expand(weights)
 
             # for x in range(len(node.children)):
             #   print(node.children[x].map, node.children[x].utility, node.children[x].depth, node.children[x].action)
@@ -205,6 +218,28 @@ class PlayerAI(BaseAI):
                 best_move = child.action
 
         return best_move
+
+    def get_offspring(self, weights):
+        l_rate = 0.1
+        return (
+            weights[0] + uniform(-l_rate, l_rate),
+            weights[1] + uniform(-l_rate, l_rate),
+            weights[2] + uniform(-l_rate, l_rate),
+            weights[3] + uniform(-l_rate, l_rate),
+            weights[4] + uniform(-l_rate, l_rate),
+            weights[5] + uniform(-l_rate, l_rate)
+        )
+
+    def weights_tuple(self):
+        return (self.A, self.B, self.C, self.D, self.E, self.F)
+
+    def set_weights(self, weights):
+        self.A = weights[0]
+        self.B = weights[1]
+        self.C = weights[2]
+        self.D = weights[3]
+        self.E = weights[4]
+        self.F = weights[5]
 
 
 def maximize(node, alpha, beta):
