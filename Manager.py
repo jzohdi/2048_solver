@@ -19,7 +19,7 @@ class Board:
                     }
                     matched = str.match(/tile-position-/);
                     if (matched) {
-                        tile[0] = str.match(/[\d+]-[\d+]/)[0]; 
+                        tile[0] = str.match(/[\d+]-[\d+]/)[0];
                     }
                     })
                     return tile
@@ -29,10 +29,10 @@ class Board:
                     const x = document.getElementsByClassName("tile-container");
                     x[0].childNodes.forEach( ele => {
                         const curr = getTile(ele.classList)
-                        tiles.push(curr)   
+                        tiles.push(curr)
                     })
                     return tiles
-                } 
+                }
                 return getAll()
             """
         self.is_game_over_js = """
@@ -123,6 +123,21 @@ class Board:
             children.append(player.get_offspring(weights))
 
 
+def run_child(manager, player, browser, body):
+
+    while True:
+        manager.parse_board(browser)
+        move_int = player.getMove(manager)
+        # print(move_int)
+        if move_int != None:
+            key = manager.get_key_from_move(move_int)
+            body.send_keys(key)
+
+        elif manager.is_game_over(browser):
+            score = manager.get_score(browser)
+            return (score, player.weights_tuple())
+
+
 if __name__ == "__main__":
 
     player = PlayerAI()
@@ -143,24 +158,13 @@ if __name__ == "__main__":
         try_weights = children_to_try.pop()
         player.set_weights(try_weights)
         # get score for single offpsring
-        while True:
 
-            manager.parse_board(browser)
-            move_int = player.getMove(manager)
-            # print(move_int)
-            if move_int != None:
-                key = manager.get_key_from_move(move_int)
-                body.send_keys(key)
-
-            elif manager.is_game_over(browser):
-                score = manager.get_score(browser)
-                print(f"score... {score}")
-                if score > max_score:
-                    max_score = score
-                    best_weights = player.weights_tuple()
-                    print(f"new best weights {best_weights}")
-
-                break
+        (score, child_weights) = run_child(manager, player, browser, body)
+        print(f"score... {score}")
+        if score > max_score:
+            max_score = score
+            best_weights = child_weights
+            print(f"new best weights {best_weights}")
 
         if not children_to_try:
             manager.init_offspring(player, children_to_try, best_weights)

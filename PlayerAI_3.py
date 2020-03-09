@@ -17,7 +17,7 @@ from collections import deque
 K = [[20, 15, 15, 15], [10, 4, 3, 2], [4, 3, 2, 1], [3, 2, 1, 0]]
 probability = 0.6
 possibleNewTiles = [2, 4]
-depth_limit = 7
+depth_limit = 6
 time_limit = 2
 
 # heuristic functions
@@ -85,7 +85,10 @@ def rateBoard(weights, board, size, maxTile, action):
 
     game_length = math.log(maxTile)/math.log(4) + math.log(maxTile)
 
-    return cell_weights*A*game_length + row_smooth*B + corner*C + game_length*blank_spaces*D - penalty*game_length*F
+    total_score = cell_weights*A*game_length + row_smooth*B + \
+        corner*C + game_length*blank_spaces*D - penalty*game_length*F
+    # print(f'total: {total_score}')
+    return total_score
 
 
 def getNewTileValue():
@@ -167,12 +170,12 @@ class Grid_State(Grid):
 
 class PlayerAI(BaseAI):
     def __init__(self):
-        self.A = 0.9670060041155282  # cell weights
-        self.B = 1.8491286734253722  # smoothness
-        self.C = 0.7771772048658381  # corner
-        self.D = 1.3679127572190106  # blank spaces
-        self.E = 0.15645327196892767  # smoothness/E
-        self.F = 3.9441234710105078  # penalty
+        self.A = 0.9284404821452559  # cell weights
+        self.B = 1.756509550084119  # smoothness
+        self.C = 0.6906347833364511  # corner
+        self.D = 1.344754370682887  # blank spaces
+        self.E = 0.16921643282902404  # smoothness/E
+        self.F = 4.0273744373608436  # penalty
 
     def getMove(self, grid):
 
