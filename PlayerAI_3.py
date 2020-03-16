@@ -11,84 +11,124 @@ from Grid_3 import Grid
 from random import randint, uniform
 from BaseAI_3 import BaseAI
 from collections import deque
+from typing import List, Set, Dict, Tuple
 
 # from Dequeue import deque
-
-K = [[20, 15, 15, 15], [10, 4, 3, 2], [4, 3, 2, 1], [3, 2, 1, 0]]
-probability = 0.6
+probability = 0.8
 possibleNewTiles = [2, 4]
-depth_limit = 6
 time_limit = 2
 
 # heuristic functions
 #
 
 
-def position_score(board):
+class Heuristics:
+    K = ((50, 15, 15, 12), (10, 4, 3, 2),
+         (4, 3, 2, 1), (3, 2, 1, 0))
 
-    empty_cells = 0
-    score = 0
-    for x in range(4):
-        for y in range(4):
-            score += K[x][y] * board[x][y]
-            if board[x][y] == 0:
-                empty_cells += 3
+    def __init__(self):
+        pass
 
-    if empty_cells != 0:
-        empty_cells = math.log(empty_cells)/math.log(2)
+    @staticmethod
+    def position_score(board: List[List[int]]):
+        empty_cells = 0
+        score = 0
 
-    return (score, empty_cells)
+        for x in range(4):
+            for y in range(4):
+                score += Heuristics.K[x][y] * board[x][y]
+                if board[x][y] == 0:
+                    empty_cells += 1
 
+        return (score, empty_cells)
 
-def row_likeness(board):
+    # returns a negative score,
+    # the larger the difference between
+    # two left and right cells,
+    # the bigger the penalty.
+    @staticmethod
+    def row_likeness(board: List[List[int]]):
+        score: int = 0
+        for x in range(4):
+            for y in range(3):
+                cell: int = board[x][y]
+                right_neighbor: int = board[x][y+1]
+                # it should not be a penalty if the right neighbor is
+                # half of the left
+                score -= (abs(cell - right_neighbor)/10)
 
-    score = 0
-    for x in range(4):
-        for y in range(3):
-            score -= int(abs(board[x][y] - board[x][y+1]))
+        return score
 
-    return score
+    @staticmethod
+    def corners(board: List[List[int]], maxTile: int):
 
+        score: float = 0.0
 
-def corners(board, maxTile):
+        if board[0][0] == maxTile:
+            score += math.log(maxTile)
+        else:
+            score -= maxTile
+        return score
 
-    score = 0
+    @staticmethod
+    def score_top(row: List[int], max_tile: int):
+        score: float = 0.0
+        for cell in row:
+            if cell < (max_tile/4):
+                score -= (max_tile * (1/(cell + 1)))
+        return score
 
-    if board[0][0] == maxTile:
-        score += maxTile
+    @staticmethod
+    def rateBoard(weights: Dict[str, float], board: List[List[int]], maxTile: int, print_h=False):
+        # rating = 0
+        penalty = 0
 
-    if score != 0:
-        score = math.log(score)
-    # if board[0][0] == 2048:
-    #   score += 10
-    return score
+        (cell_weights, blank_spaces) = Heuristics.position_score(board)
+        if print_h:
+            print(f"number of blanks: {blank_spaces}")
+        if blank_spaces <= 1:
+            penalty = -250
+        if blank_spaces == 0:
+            penalty -= 1000
 
+        row_gradient = Heuristics.row_likeness(board)
+        row_smooth = row_gradient*math.log(maxTile)/weights["E"]
 
-def rateBoard(weights, board, size, maxTile, action):
-    A = weights["A"]
-    B = weights["B"]
-    C = weights["C"]
-    D = weights["D"]
-    E = weights["E"]
-    F = weights["F"]
-    # rating = 0
-    penalty = 0
-    # weight of each cell
-    (cell_weights, blank_spaces) = position_score(board)
+        corner = Heuristics.corners(board, maxTile)
 
-    row_smooth = row_likeness(board)*math.log(maxTile)/E
+        # top_row_score will be a negative value directly related to the values of the top row
+        #  the further away the value in the top row is to the max tile, the larger this penalty will be
+        top_row_score = Heuristics.score_top(board[0][:], maxTile)
 
-    corner = corners(board, maxTile)
+        # game legnth is used becasue something like cell_weights will become a much larger number over time
+        # and you dont want this to overtake all the other factors
+        # this function will increase from 0.5 -> 0.833 when maxTile is 1024.
+        game_length = math.log(maxTile)/(1 + math.log(maxTile))
 
-    if blank_spaces <= 1:
-        penalty = 250
+        K_spread = cell_weights*weights["A"]*game_length
+        row_smoothness = row_smooth*weights["B"]  # *game_length
+        corner = corner*weights["C"]
+        # top_row = top_row_score*weights["E"]
+        empty_cells = blank_spaces*weights["D"]*game_length
+        penalty = penalty*weights["F"]*game_length
+        if print_h:
+            print(f"K_spread:    {K_spread}")
+            print(f"smoothness:  {row_smoothness}")
+            print(f"corner:      {corner}")
+            print(f"empty_cells: {empty_cells}")
+            # print(f"top_row:     {top_row}")
+            print(f"penalty:     {penalty}")
 
-    game_length = math.log(maxTile)/math.log(4) + math.log(maxTile)
-
-    total_score = cell_weights*A*game_length + row_smooth*B + \
-        corner*C + game_length*blank_spaces*D - penalty*game_length*F
-    # print(f'total: {total_score}')
-    return total_score
+        total_score = sum((
+            K_spread,
+            row_smoothness,
+            corner,
+            empty_cells,
+            # top_row,
+            penalty
+        ))
+        # print(f'total: {total_score}')
+        return total_score
 
 
 def getNewTileValue():
@@ -134,27 +174,25 @@ class Grid_State(Grid):
                     child = get_child(self.depth + 1, choice, self.map)
                     child.move(choice)
                     if child.map != self.map:
-                        child.utility = rateBoard(weights,
-                                                  child.map,
-                                                  child.size,
-                                                  child.getMaxTile(),
-                                                  child.action)
+                        child.utility = Heuristics.rateBoard(weights,
+                                                             child.map,
+                                                             child.getMaxTile())
                         self.children.append(child)
 
     def comp_moves(self, weights):
 
         cells = [(x, y) for x in range(4)
                  for y in range(4) if self.map[x][y] == 0]
+
         for cell in cells:
             if self.canInsert(cell):
 
                 child = get_child(self.depth + 1, self.action, self.map)
                 child.setCellValue(cell, getNewTileValue())
-                child.utility = rateBoard(weights,
-                                          child.map,
-                                          child.size,
-                                          child.getMaxTile(),
-                                          child.action)
+                child.utility = Heuristics.rateBoard(weights,
+                                                     child.map,
+                                                     child.getMaxTile()
+                                                     )
                 self.children.append(child)
 
     def to_s(self):
@@ -170,27 +208,34 @@ class Grid_State(Grid):
 
 class PlayerAI(BaseAI):
     def __init__(self):
-        self.A = 0.9284404821452559  # cell weights
+        self.A = 2.5  # cell weights
         self.B = 1.756509550084119  # smoothness
-        self.C = 0.6906347833364511  # corner
-        self.D = 1.344754370682887  # blank spaces
-        self.E = 0.16921643282902404  # smoothness/E
-        self.F = 4.0273744373608436  # penalty
+        self.C = 2.0  # corner
+        self.D = 2.0  # blank spaces
+        self.E = 0.9  # smoothness/E
+        self.F = 2.0  # penalty
+        self.number_of_weights = 6
+        self.depth_limit = 5
+
+    def get_weights_dict(self):
+        return {"A": self.A, "B": self.B, "C": self.C,
+                "D": self.D, "E": self.E, "F": self.F}
 
     def getMove(self, grid):
 
         search_start = time.clock()
-        #explored = deque()
+        # explored = deque()
         stack = deque()
         explored = set()
         begin_state = Grid_State(0, "Initial")
-        weights = {"A": self.A, "B": self.B, "C": self.C,
-                   "D": self.D, "E": self.E, "F": self.F}
+
+        weights = self.get_weights_dict()
+
         begin_state.map = [x[:] for x in grid.map]
         stack.append(begin_state)
-        repr = begin_state.to_s()
+        rep_s = begin_state.to_s()
 
-        explored.add(repr)
+        explored.add(rep_s)
         while stack:
 
             node = stack.popleft()
@@ -200,12 +245,12 @@ class PlayerAI(BaseAI):
             #   print(node.children[x].map, node.children[x].utility, node.children[x].depth, node.children[x].action)
             for y in range(len(node.children) - 1, -1, -1):
                 child = node.children[y]
-                if child.depth < depth_limit:
-                    repr = child.to_s()
-                    if repr not in explored:
+                if child.depth < self.depth_limit:
+                    rep_s = child.to_s()
+                    if rep_s not in explored:
                         # if node.children[y] not in stack:
                         stack.append(node.children[y])
-                        explored.add(repr)
+                        explored.add(rep_s)
             # if time.clock() - search_start >= time_limit:
             #     #break_time = True
             #     break
@@ -223,15 +268,15 @@ class PlayerAI(BaseAI):
         return best_move
 
     def get_offspring(self, weights):
+        children = []
         l_rate = 0.1
-        return (
-            weights[0] + uniform(-l_rate, l_rate),
-            weights[1] + uniform(-l_rate, l_rate),
-            weights[2] + uniform(-l_rate, l_rate),
-            weights[3] + uniform(-l_rate, l_rate),
-            weights[4] + uniform(-l_rate, l_rate),
-            weights[5] + uniform(-l_rate, l_rate)
-        )
+        random_mutation = uniform(-l_rate, l_rate)
+        for w in range(self.number_of_weights):
+
+            copy_parent = list(weights)
+            copy_parent[w] += random_mutation
+            children.append(tuple(copy_parent))
+        return children
 
     def weights_tuple(self):
         return (self.A, self.B, self.C, self.D, self.E, self.F)
@@ -256,9 +301,10 @@ def maximize(node, alpha, beta):
         maxUtility = max(maxUtility, minimize(child, alpha, beta))
 
         if maxUtility >= beta:
+
             return maxUtility
 
-        #alpha = max(alpha, maxUtility)
+        # alpha = max(alpha, maxUtility)
         if maxUtility >= alpha:
             alpha = maxUtility
         else:
@@ -280,7 +326,7 @@ def minimize(node, alpha, beta):
         if minUtility <= alpha:
             return minUtility
 
-        #beta = min(beta, minUtility)
+        # beta = min(beta, minUtility)
         if minUtility <= beta:
             beta = minUtility
         else:
@@ -288,4 +334,4 @@ def minimize(node, alpha, beta):
 
     return minUtility
 
-#print(rateBoard([[512, 128, 8, 16], [8, 64, 32, 8], [2, 32, 8, 4], [32, 16, 4, 2]], 5, 4, 512, 1))
+# print(rateBoard([[512, 128, 8, 16], [8, 64, 32, 8], [2, 32, 8, 4], [32, 16, 4, 2]], 5, 4, 512, 1))
