@@ -1,7 +1,7 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from webdriver_manager.chrome import ChromeDriverManager
-from PlayerAI_3 import PlayerAI
+from PlayerAI_3 import PlayerAI, Heuristics
 import os
 import time
 
@@ -57,7 +57,7 @@ class Board:
             2: "LEFT",
             3: "RIGHT"
         }
-        self.number_offspring = 10
+        self.number_offspring = 5
 
     def get_key_from_move(self, move):
 
@@ -119,14 +119,43 @@ class Board:
             board_dictionary[pos] = int(value)
 
     def init_offspring(self, player, children, weights):
-        for i in range(self.number_offspring):
-            children.append(player.get_offspring(weights))
+        offspring_of_best_weights = player.get_offspring(weights)
+        for child in offspring_of_best_weights:
+            children.append(child)
+
+
+def getMaxTile(board):
+    maxTile = 0
+
+    for x in range(4):
+        for y in range(4):
+            maxTile = max(maxTile, board[x][y])
+
+    return maxTile
+
+
+def board_array_to_s(board):
+    string = ''
+    for row in board:
+        for cell in row:
+            string += str(cell) + "  "
+        string += "\n"
+
+    return string
 
 
 def run_child(manager, player, browser, body):
 
     while True:
         manager.parse_board(browser)
+
+        # print(f'board:\n\n{board_array_to_s(manager.map)}')
+        # score = Heuristics.rateBoard(
+        #     player.get_weights_dict(),
+        #     manager.map,
+        #     getMaxTile(manager.map), True)
+        # print(f"total:  {score}")
+
         move_int = player.getMove(manager)
         # print(move_int)
         if move_int != None:
@@ -138,17 +167,7 @@ def run_child(manager, player, browser, body):
             return (score, player.weights_tuple())
 
 
-if __name__ == "__main__":
-
-    player = PlayerAI()
-    path = os.path.dirname(os.path.abspath(__file__))
-    browser = webdriver.Chrome(ChromeDriverManager().install())
-    browser.get(os.path.join(path, "index.html"))
-    manager = Board()
-
-    body = browser.find_element_by_tag_name("body")
-    # game_over = browser.find_element_by_class_name("retry-button")
-    # print(game_over)
+def play_2028(player, manager, browser, body):
     max_score = 0
     best_weights = player.weights_tuple()
     children_to_try = [best_weights]
@@ -170,4 +189,30 @@ if __name__ == "__main__":
             manager.init_offspring(player, children_to_try, best_weights)
 
         manager.try_again(browser)
-        # browser.quit()
+
+
+if __name__ == "__main__":
+
+    browser = None
+
+    try:
+        player = PlayerAI()
+        path = os.path.dirname(os.path.abspath(__file__))
+        browser = webdriver.Chrome(ChromeDriverManager().install())
+        browser.get(os.path.join(path, "index.html"))
+        manager = Board()
+
+        body = browser.find_element_by_tag_name("body")
+
+        play_2028(player, manager, browser, body)
+    except KeyboardInterrupt:
+
+        if browser != None:
+            browser.quit()
+
+    except Exception as e:
+        print("An error occured: ")
+        print(e)
+
+        if browser != None:
+            browser.quit()
