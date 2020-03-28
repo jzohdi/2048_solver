@@ -23,8 +23,8 @@ time_limit = 2
 
 
 class Heuristics:
-    K = ((50, 15, 15, 12), (10, 4, 3, 2),
-         (4, 3, 2, 1), (3, 2, 1, 0))
+    K = [[50, 15, 15, 12], [10, 6, 5, 4],
+         [4, 3, 2, 1], [3, 2, 1, 0]]
 
     def __init__(self):
         pass
@@ -57,6 +57,32 @@ class Heuristics:
                 # half of the left
                 score -= (abs(cell - right_neighbor)/10)
 
+        return score
+
+    @staticmethod
+    def gradient_score(board: List[List[int]]):
+        # it's worse if cell2 is greater, so this should be reflected
+        # if cell1 is greater, then the best score is when cell1 and cell2 values are more similar
+        def score_neighbors(cell1, cell2):
+            # if they are the same, the score should reflect that this is good,
+            # but not so good as to deter combining them.
+            if cell1 == cell2:
+                return 0
+            diff = cell1 - cell2
+            if cell1 > cell2:
+                return 10/diff
+            return diff
+
+        score = 0
+
+        for i in range(3):
+            for j in range(4):
+                if j < 3:
+                    score_to_right = score_neighbors(
+                        board[i][j], board[i][j + 1])
+                    score += score_to_right
+                score_down = score_neighbors(board[i][j], board[i + 1][j])
+                score += score_down
         return score
 
     @staticmethod
@@ -106,23 +132,26 @@ class Heuristics:
         game_length = math.log(maxTile)/(1 + math.log(maxTile))
 
         K_spread = cell_weights*weights["A"]*game_length
-        row_smoothness = row_smooth*weights["B"]  # *game_length
-        corner = corner*weights["C"]
+        # row_smoothness = row_smooth*weights["B"]  # *game_length
+        gradient_smoothness = Heuristics.gradient_score(board)*weights["B"]
+        # corner = corner*weights["C"]
         # top_row = top_row_score*weights["E"]
         empty_cells = blank_spaces*weights["D"]*game_length
         penalty = penalty*weights["F"]*game_length
         if print_h:
             print(f"K_spread:    {K_spread}")
             print(f"smoothness:  {row_smoothness}")
-            print(f"corner:      {corner}")
+            print(f"gradient: {gradient_smoothness}")
+            # print(f"corner:      {corner}")
             print(f"empty_cells: {empty_cells}")
             # print(f"top_row:     {top_row}")
             print(f"penalty:     {penalty}")
 
         total_score = sum((
             K_spread,
-            row_smoothness,
-            corner,
+            gradient_smoothness,
+            # row_smoothness,
+            # corner,
             empty_cells,
             # top_row,
             penalty
@@ -187,13 +216,15 @@ class Grid_State(Grid):
         for cell in cells:
             if self.canInsert(cell):
 
-                child = get_child(self.depth + 1, self.action, self.map)
-                child.setCellValue(cell, getNewTileValue())
-                child.utility = Heuristics.rateBoard(weights,
-                                                     child.map,
-                                                     child.getMaxTile()
-                                                     )
-                self.children.append(child)
+                for possible_value in [2, 4]:
+                    child = get_child(self.depth + 1, self.action, self.map)
+                    child.setCellValue(cell, possible_value)
+                    # child.setCellValue(cell, getNewTileValue())
+                    child.utility = Heuristics.rateBoard(weights,
+                                                         child.map,
+                                                         child.getMaxTile()
+                                                         )
+                    self.children.append(child)
 
     def to_s(self):
         string = ''
@@ -208,7 +239,7 @@ class Grid_State(Grid):
 
 class PlayerAI(BaseAI):
     def __init__(self):
-        self.A = 2.5  # cell weights
+        self.A = 1.5  # cell weights
         self.B = 1.756509550084119  # smoothness
         self.C = 2.0  # corner
         self.D = 2.0  # blank spaces
