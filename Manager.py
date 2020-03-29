@@ -150,11 +150,11 @@ def run_child(manager, player, browser, body):
         manager.parse_board(browser)
 
         # print(f'board:\n\n{board_array_to_s(manager.map)}')
-        # score = Heuristics.rateBoard(
-        #     player.get_weights_dict(),
-        #     manager.map,
-        #     getMaxTile(manager.map), True)
-        # print(f"total:  {score}")
+        score = Heuristics.rateBoard(
+            player.get_weights_dict(),
+            manager.map,
+            getMaxTile(manager.map), True)
+        print(f"total:  {score}")
 
         move_int = player.getMove(manager)
         # print(move_int)
