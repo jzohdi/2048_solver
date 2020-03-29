@@ -17,9 +17,15 @@ from typing import List, Set, Dict, Tuple
 probability = 0.8
 possibleNewTiles = [2, 4]
 time_limit = 2
-
+l_rate = 0.5
 # heuristic functions
 #
+
+
+def ease_slope(number):
+    if number < 0:
+        return -((-number)**(1/2))
+    return number**(1/2)
 
 
 class Heuristics:
@@ -42,22 +48,28 @@ class Heuristics:
 
         return (score, empty_cells)
 
-    # returns a negative score,
-    # the larger the difference between
-    # two left and right cells,
-    # the bigger the penalty.
     @staticmethod
-    def row_likeness(board: List[List[int]]):
-        score: int = 0
-        for x in range(4):
-            for y in range(3):
-                cell: int = board[x][y]
-                right_neighbor: int = board[x][y+1]
-                # it should not be a penalty if the right neighbor is
-                # half of the left
-                score -= (abs(cell - right_neighbor)/10)
+    def number_of_neighbors_score(board: List[List[int]]):
+        def num_neighbors(row, col):
+            num = 0
+            if row - 1 >= 0:  # up
+                num += 1
+            if row + 1 <= 3:  # down
+                num += 1
+            if col - 1 >= 0:  # left
+                num += 1
+            if col + 1 <= 3:  # right
+                num += 1
+            return num
 
-        return score
+        score = 0
+        for row in range(4):
+            for col in range(4):
+                number_of_neighbors = num_neighbors(row, col)
+                # example: 512 * 1/4 is worse than 512 * 1/2
+                score += (1.0/number_of_neighbors) * board[row][col]
+
+        return ease_slope(score)
 
     @staticmethod
     def gradient_score(board: List[List[int]]):
@@ -86,22 +98,14 @@ class Heuristics:
         return score
 
     @staticmethod
-    def corners(board: List[List[int]], maxTile: int):
+    def corner_score(board: List[List[int]], maxTile: int):
 
         score: float = 0.0
 
         if board[0][0] == maxTile:
-            score += math.log(maxTile)
+            score += maxTile
         else:
             score -= maxTile
-        return score
-
-    @staticmethod
-    def score_top(row: List[int], max_tile: int):
-        score: float = 0.0
-        for cell in row:
-            if cell < (max_tile/4):
-                score -= (max_tile * (1/(cell + 1)))
         return score
 
     @staticmethod
@@ -110,50 +114,34 @@ class Heuristics:
         penalty = 0
 
         (cell_weights, blank_spaces) = Heuristics.position_score(board)
-        if print_h:
-            print(f"number of blanks: {blank_spaces}")
+
         if blank_spaces <= 1:
-            penalty = -250
-        if blank_spaces == 0:
-            penalty -= 1000
-
-        row_gradient = Heuristics.row_likeness(board)
-        row_smooth = row_gradient*math.log(maxTile)/weights["E"]
-
-        corner = Heuristics.corners(board, maxTile)
-
-        # top_row_score will be a negative value directly related to the values of the top row
-        #  the further away the value in the top row is to the max tile, the larger this penalty will be
-        top_row_score = Heuristics.score_top(board[0][:], maxTile)
+            penalty = -50
 
         # game legnth is used becasue something like cell_weights will become a much larger number over time
         # and you dont want this to overtake all the other factors
         # this function will increase from 0.5 -> 0.833 when maxTile is 1024.
         game_length = math.log(maxTile)/(1 + math.log(maxTile))
 
-        K_spread = cell_weights*weights["A"]*game_length
-        # row_smoothness = row_smooth*weights["B"]  # *game_length
+        K_spread = cell_weights*weights["A"]
         gradient_smoothness = Heuristics.gradient_score(board)*weights["B"]
-        # corner = corner*weights["C"]
-        # top_row = top_row_score*weights["E"]
+        corner = Heuristics.corner_score(board, maxTile)*weights["C"]
         empty_cells = blank_spaces*weights["D"]*game_length
         penalty = penalty*weights["F"]*game_length
+
         if print_h:
             print(f"K_spread:    {K_spread}")
-            print(f"smoothness:  {row_smoothness}")
             print(f"gradient: {gradient_smoothness}")
-            # print(f"corner:      {corner}")
+            print(f"corner:      {corner}")
             print(f"empty_cells: {empty_cells}")
-            # print(f"top_row:     {top_row}")
             print(f"penalty:     {penalty}")
 
         total_score = sum((
             K_spread,
             gradient_smoothness,
-            # row_smoothness,
-            # corner,
+            corner,
             empty_cells,
-            # top_row,
+
             penalty
         ))
         # print(f'total: {total_score}')
@@ -186,12 +174,6 @@ class Grid_State(Grid):
             self.player_moves(weights)
         else:
             self.comp_moves(weights)
-
-#    def get_child(self, child_action):
-#        start_time = time.time()
-#        new_grid = Grid_State(self.depth + 1, child_action)
-#        new_grid.map = [x[:] for x in self.map]
-#        return new_grid
 
     def player_moves(self, weights):
 
@@ -240,11 +222,11 @@ class Grid_State(Grid):
 class PlayerAI(BaseAI):
     def __init__(self):
         self.A = 1.5  # cell weights
-        self.B = 1.756509550084119  # smoothness
+        self.B = 2.0  # gradient
         self.C = 2.0  # corner
-        self.D = 2.0  # blank spaces
-        self.E = 0.9  # smoothness/E
-        self.F = 2.0  # penalty
+        self.D = 10.0  # blank spaces
+        self.E = 0.9  #
+        self.F = 5.0  # penalty
         self.number_of_weights = 6
         self.depth_limit = 5
 
@@ -272,9 +254,13 @@ class PlayerAI(BaseAI):
             node = stack.popleft()
             node.expand(weights)
 
-            # for x in range(len(node.children)):
-            #   print(node.children[x].map, node.children[x].utility, node.children[x].depth, node.children[x].action)
-            for y in range(len(node.children) - 1, -1, -1):
+            # if there are not children,
+            # this is very bad
+            num_children = len(node.children)
+            if num_children == 0:
+                node.utility = -10000
+
+            for y in range(num_children - 1, -1, -1):
                 child = node.children[y]
                 if child.depth < self.depth_limit:
                     rep_s = child.to_s()
@@ -300,7 +286,6 @@ class PlayerAI(BaseAI):
 
     def get_offspring(self, weights):
         children = []
-        l_rate = 0.1
         random_mutation = uniform(-l_rate, l_rate)
         for w in range(self.number_of_weights):
 
