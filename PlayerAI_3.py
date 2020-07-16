@@ -17,7 +17,7 @@ from typing import List, Set, Dict, Tuple
 probability = 0.8
 possibleNewTiles = [2, 4]
 time_limit = 2
-mutation_degree = 2.0
+l_rate = 0.5
 # heuristic functions
 #
 
@@ -28,73 +28,65 @@ def ease_slope(number):
     return number**(1/2)
 
 
-def transform(cell: int):
-    if cell > 0:
-        return math.log2(cell)
-    return 0
-
-
 class Heuristics:
-    # K = [[5, 4, 3, 2], [4, 3, 2, 1],
-    #      [3, 2, 1, 0], [-2, -4, -6, -10]]
-    K = [[20, 15, 15, 12], [13, 10, 6, 4],
+    K = [[50, 15, 15, 12], [10, 6, 5, 4],
          [4, 3, 2, 1], [3, 2, 1, 0]]
 
     def __init__(self):
         pass
 
     @staticmethod
-    def position_score(board: List[List[int]], max_tile):
-        # get no credit if property is not retained
-
+    def position_score(board: List[List[int]]):
         empty_cells = 0
         score = 0
 
         for x in range(4):
             for y in range(4):
-                score += Heuristics.K[x][y] * transform(board[x][y])
+                score += Heuristics.K[x][y] * board[x][y]
                 if board[x][y] == 0:
                     empty_cells += 1
 
-        if empty_cells <= 1:
-            empty_cells = -3
-
-        return (ease_slope(score), empty_cells)
+        return (score, empty_cells)
 
     @staticmethod
-    def correct_position_score(board: List[List[int]]):
-        pass
+    def number_of_neighbors_score(board: List[List[int]]):
+        def num_neighbors(row, col):
+            num = 0
+            if row - 1 >= 0:  # up
+                num += 1
+            if row + 1 <= 3:  # down
+                num += 1
+            if col - 1 >= 0:  # left
+                num += 1
+            if col + 1 <= 3:  # right
+                num += 1
+            return num
 
-    # the closer to the top of the board, the better the value
-    @staticmethod
-    def rate_top_row(board: List[List[int]], max_tile, print_h=False):
-        def get_diff(ref_cell, list_of_cells):
-            diff = 0
-            for cell in list_of_cells:
-                diff -= (ref_cell - cell)
-            return diff
+        score = 0
+        for row in range(4):
+            for col in range(4):
+                number_of_neighbors = num_neighbors(row, col)
+                # example: 512 * 1/4 is worse than 512 * 1/2
+                score += (1.0/number_of_neighbors) * board[row][col]
 
-        top_row = board[0]
-        if print_h:
-            print("top row: ")
-            print(top_row)
-        # if the corner is not the max_tile,
-        # its still better to maximize the top row
-        if top_row[0] != max_tile:
-            return ease_slope(-max_tile + get_diff(max_tile, top_row))
-        else:
-            return ease_slope(sum(top_row))
+        return ease_slope(score)
 
     @staticmethod
     def gradient_score(board: List[List[int]]):
-        # the close together the cells are, the better the score should be
+        # it's worse if cell2 is greater, so this should be reflected
+        # if cell1 is greater, then the best score is when cell1 and cell2 values are more similar
         def score_neighbors(cell1, cell2):
+            # if they are the same, the score should reflect that this is good,
+            # but not so good as to deter combining them.
             if cell1 == cell2:
                 return 0
-            diff = abs(cell1 - cell2)   # + 1 in case they are the same
-            return 2/diff
+            diff = cell1 - cell2
+            if cell1 > cell2:
+                return 10/diff
+            return diff
 
         score = 0
+
         for i in range(3):
             for j in range(4):
                 if j < 3:
@@ -102,99 +94,58 @@ class Heuristics:
                         board[i][j], board[i][j + 1])
                     score += score_to_right
                 score_down = score_neighbors(board[i][j], board[i + 1][j])
-                score += (score_down/3)
-        return ease_slope(score)
-
-    @staticmethod
-    def top_row_full(top_row: List[int], max_tile):
-        return not any([x == 0 for x in top_row]) and max_tile in top_row
-
-    @staticmethod
-    def find_top_vals(board: List[List[int]], number_of_vals: int):
-        flattened_board = [cell for row in board for cell in row]
-        flattened_board.sort()
-        top_values = flattened_board[-number_of_vals:]
-        return top_values
-
-    @staticmethod
-    def corner_score(board: List[List[int]], max_tile: int):
-
-        score: float = 0.0
-
-        if board[0][0] == max_tile:
-            score += math.log2(max_tile)
-        else:
-            score -= math.log2(max_tile)
+                score += score_down
         return score
 
     @staticmethod
-    def top_vals_penalty(board: List[List[int]]):
-        penalty = 0
-        top_values = Heuristics.find_top_vals(board, 4)
-        rest_of_board = board[1:]
-        flat_rest = [cell
-                     for row in rest_of_board
-                     for cell in row
-                     ]
-        for val in top_values:
-            if val in flat_rest:
-                penalty += val
+    def corner_score(board: List[List[int]], maxTile: int):
 
-        return -math.log2(penalty) if penalty > 0 else 0
+        score: float = 0.0
+
+        if board[0][0] == maxTile:
+            score += maxTile
+        else:
+            score -= maxTile
+        return score
 
     @staticmethod
-    def rateBoard(weights: Tuple[float], board: List[List[int]], max_tile: int, move, print_h=False):
+    def rateBoard(weights: Dict[str, float], board: List[List[int]], maxTile: int, print_h=False):
+        # rating = 0
+        penalty = 0
+
+        (cell_weights, blank_spaces) = Heuristics.position_score(board)
+
+        if blank_spaces <= 1:
+            penalty = -50
 
         # game legnth is used becasue something like cell_weights will become a much larger number over time
         # and you dont want this to overtake all the other factors
-        # this function will increase from 0.5 -> 0.833 when max_tile is 1024.
-        game_length = math.log(max_tile)/(1 + math.log(max_tile))
+        # this function will increase from 0.5 -> 0.833 when maxTile is 1024.
+        game_length = math.log(maxTile)/(1 + math.log(maxTile))
 
-        bonus = 0
-        penalty = 0
-
-        (cell_weights, blank_spaces) = Heuristics.position_score(board, max_tile)
-
-        if blank_spaces <= 1:
-            penalty -= 2*math.log2(max_tile)
-        if board[0][0] != max_tile:
-            penalty -= 4*math.log2(max_tile)
-        if move == 1:
-            penalty -= math.log2(max_tile)
-
-        K_spread = cell_weights*weights[0]
-        gradient_smoothness = Heuristics.gradient_score(
-            board)*weights[1]
-        corner = Heuristics.corner_score(board, max_tile)*weights[2]
-        empty_cells = blank_spaces*weights[3]*game_length
-
-        if Heuristics.top_row_full(board[0], max_tile):
-            bonus += 4 * math.log2(max_tile)
-        # bonus = bonus*weights[5]
-        top_vals_not_in_top_row = Heuristics.top_vals_penalty(
-            board) * weights[4]
+        K_spread = cell_weights*weights["A"]
+        gradient_smoothness = Heuristics.gradient_score(board)*weights["B"]
+        corner = Heuristics.corner_score(board, maxTile)*weights["C"]
+        empty_cells = blank_spaces*weights["D"]*game_length
+        penalty = penalty*weights["F"]*game_length
 
         if print_h:
-            print(f"move: {move}")
             print(f"K_spread:    {K_spread}")
             print(f"gradient: {gradient_smoothness}")
             print(f"corner:      {corner}")
             print(f"empty_cells: {empty_cells}")
-            # print(f"rows score: {row_rating}")
-            print(f"top row penalty {top_vals_not_in_top_row}")
-            print(f"bonus:     {bonus}")
-            print(f"penalty: {penalty}")
+            print(f"penalty:     {penalty}")
 
-        return sum((
+        total_score = sum((
             K_spread,
             gradient_smoothness,
             corner,
             empty_cells,
-            # row_rating,
-            top_vals_not_in_top_row,
-            bonus,
+
             penalty
         ))
+        # print(f'total: {total_score}')
+        return total_score
 
 
 def getNewTileValue():
@@ -236,8 +187,7 @@ class Grid_State(Grid):
                     if child.map != self.map:
                         child.utility = Heuristics.rateBoard(weights,
                                                              child.map,
-                                                             child.getMaxTile(),
-                                                             choice)
+                                                             child.getMaxTile())
                         self.children.append(child)
 
     def comp_moves(self, weights):
@@ -254,8 +204,8 @@ class Grid_State(Grid):
                     # child.setCellValue(cell, getNewTileValue())
                     child.utility = Heuristics.rateBoard(weights,
                                                          child.map,
-                                                         child.getMaxTile(),
-                                                         self.action)
+                                                         child.getMaxTile()
+                                                         )
                     self.children.append(child)
 
     def to_s(self):
@@ -271,27 +221,28 @@ class Grid_State(Grid):
 
 class PlayerAI(BaseAI):
     def __init__(self):
-        self.weights = (
-            2.4,  # K_spread,
-            5.0,  # gradient,
-            1.2,  # corner,
-            2.0,  # empties,
-            2.0,  # row score,
-            2.0  # bonus
-        )
-
+        self.A = 1.5  # cell weights
+        self.B = 4.0  # gradient
+        self.C = 2.0  # corner
+        self.D = 10.0  # blank spaces
+        self.E = 0.9  #
+        self.F = 5.0  # penalty
         self.number_of_weights = 6
-        self.depth_limit = 6
+        self.depth_limit = 5
+
+    def get_weights_dict(self):
+        return {"A": self.A, "B": self.B, "C": self.C,
+                "D": self.D, "E": self.E, "F": self.F}
 
     def getMove(self, grid):
 
-        search_start = time.clock()
+        search_start = time.process_time()  # time.clock()
         # explored = deque()
         stack = deque()
         explored = set()
         begin_state = Grid_State(0, "Initial")
 
-        weights = self.weights_tuple()
+        weights = self.get_weights_dict()
 
         begin_state.map = [x[:] for x in grid.map]
         stack.append(begin_state)
@@ -335,7 +286,7 @@ class PlayerAI(BaseAI):
 
     def get_offspring(self, weights):
         children = []
-        random_mutation = uniform(-mutation_degree, mutation_degree)
+        random_mutation = uniform(-l_rate, l_rate)
         for w in range(self.number_of_weights):
 
             copy_parent = list(weights)
@@ -344,10 +295,15 @@ class PlayerAI(BaseAI):
         return children
 
     def weights_tuple(self):
-        return self.weights
+        return (self.A, self.B, self.C, self.D, self.E, self.F)
 
     def set_weights(self, weights):
-        self.weights = weights
+        self.A = weights[0]
+        self.B = weights[1]
+        self.C = weights[2]
+        self.D = weights[3]
+        self.E = weights[4]
+        self.F = weights[5]
 
 
 def maximize(node, alpha, beta):

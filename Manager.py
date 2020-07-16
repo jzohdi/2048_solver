@@ -143,14 +143,14 @@ def run_child(manager, player, browser, body):
 
         move_int = player.getMove(manager)
         # print(f'board:\n\n{board_array_to_s(manager.map)}')
-        score = Heuristics.rateBoard(
-            player.weights_tuple(),
-            manager.map,
-            getMaxTile(manager.map),
-            move_int,
-            True
-        )
-        print(f"total:  {score}")
+        # score = Heuristics.rateBoard(
+        #     player.weights_tuple(),
+        #     manager.map,
+        #     getMaxTile(manager.map),
+        #     move_int,
+        #     True
+        # )
+        # print(f"total:  {score}")
         if move_int != None:
             key = manager.get_key_from_move(move_int)
             body.send_keys(key)
@@ -177,7 +177,9 @@ def play_2028(player, manager, browser, body):
             max_score = score
             best_weights = child_weights
             print(f"new best weights {best_weights}")
-
+            with open("previous_best_weight.txt", "w+") as f:
+                f.write(str(best_weights))
+                f.close()
         if not children_to_try:
             manager.init_offspring(player, children_to_try, best_weights)
 
