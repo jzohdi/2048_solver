@@ -4,12 +4,17 @@ This project is a python powered 2048 solver. The move logic is retrieved throug
 
 Original Game: https://play2048.co/
 
-## Installation
+## Requirements
 
-- using virtualenv is recommended
+- Python 3.8
+- virtualenv
 - internet connection will be necessary for the chrome launcher (chrome may be cached after the first start up)
 
-> pip install -r requirements.txt
+## Installation
+
+```
+> pip3 install -r requirements.txt
+```
 
 ## Expectiminimax
 
@@ -19,3 +24,5 @@ opponent will move in such a way to decrease your odds as much as possible. This
 ## alpha-beta-pruning
 
 The idea is that once you have your expanded game state tree, it may be too large to traverse every node. Think about how many neighbor states a board has considering you can move up, down, left, or right and for each of those moves you may have up to 14 random new tile states. To help traverse the tree efficiently, you can "prune" branches of the tree with weak scores.
+
+![2048 Preview](/images/preview.PNG)

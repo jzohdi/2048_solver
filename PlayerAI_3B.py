@@ -247,7 +247,7 @@ class PlayerAI(BaseAI):
 
     def getMove(self, grid):
 
-        search_start = time.clock()
+        search_start = time.process_time()  # time.clock()
         #explored = deque()
         explored = {}
         stack = deque()

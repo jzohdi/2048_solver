@@ -52,25 +52,17 @@ class Board:
             return score()
         """
         self.actionDic = {
-            0: "UP",
-            1: "DOWN",
-            2: "LEFT",
-            3: "RIGHT"
+            0: Keys.UP,
+            1: Keys.DOWN,
+            2: Keys.LEFT,
+            3: Keys.RIGHT
         }
         self.number_offspring = 5
 
     def get_key_from_move(self, move):
 
         direction = self.actionDic[move]
-
-        if direction == "UP":
-            return Keys.UP
-        if direction == "DOWN":
-            return Keys.DOWN
-        if direction == "LEFT":
-            return Keys.LEFT
-        if direction == "RIGHT":
-            return Keys.RIGHT
+        return direction
 
     def is_game_over(self, browser):
         result = browser.execute_script(self.is_game_over_js)
@@ -149,15 +141,16 @@ def run_child(manager, player, browser, body):
     while True:
         manager.parse_board(browser)
 
+        move_int = player.getMove(manager)
         # print(f'board:\n\n{board_array_to_s(manager.map)}')
         # score = Heuristics.rateBoard(
-        #     player.get_weights_dict(),
+        #     player.weights_tuple(),
         #     manager.map,
-        #     getMaxTile(manager.map), True)
+        #     getMaxTile(manager.map),
+        #     move_int,
+        #     True
+        # )
         # print(f"total:  {score}")
-
-        move_int = player.getMove(manager)
-        # print(move_int)
         if move_int != None:
             key = manager.get_key_from_move(move_int)
             body.send_keys(key)
@@ -184,7 +177,9 @@ def play_2028(player, manager, browser, body):
             max_score = score
             best_weights = child_weights
             print(f"new best weights {best_weights}")
-
+            with open("previous_best_weight.txt", "w+") as f:
+                f.write(str(best_weights))
+                f.close()
         if not children_to_try:
             manager.init_offspring(player, children_to_try, best_weights)
 
