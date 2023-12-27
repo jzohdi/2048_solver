@@ -16,6 +16,11 @@ Original Game: https://play2048.co/
 > pip3 install -r requirements.txt
 ```
 
+## Run
+
+```
+> python3 Manager.py
+```
 ## Expectiminimax
 
 If you are playing chess, you want your next move to give you the best odds at a winning position. At the same time you must consider that your
